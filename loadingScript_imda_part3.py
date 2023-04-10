@@ -24,6 +24,8 @@ _LICENSE = "https://creativecommons.org/publicdomain/zero/1.0/"
 _PATH_TO_DATA = r'C:\Users\calic\Downloads\huggingface-dataset\imda-dataset\IMDA - National Speech Corpus\PART3'
 # _PATH_TO_DATA = './PART1/DATA'
 
+INTERVAL_MAX_LENGTH = 25
+
 class Minds14Config(datasets.BuilderConfig):
     """BuilderConfig for xtreme-s"""
 
@@ -157,23 +159,44 @@ class NewDataset(datasets.GeneratorBasedBuilder):
         #                     elif line_num == 1:
         #                         d[key] = line.strip()
         #                         line_num -= 1
-        # AUDIO: in the case of error it will skip the speaker
+       
+        # LOAD TRANSCRIPT
         script_path = os.path.join(self.config.path_to_data, 'Scripts Same', '3000-1.TextGrid')
         tg = textgrid.TextGrid.fromFile(script_path)
-        
-
-
+        # LOAD AUDIO
         archive_path = os.path.join(path_to_data, '3000-1.wav')
         # check that archive path exists, else will not open the archive
         if os.path.exists(archive_path):
-            # read into a numpy array
+            # read into a numpy array using soundfile
             data, sr = sf.read(archive_path)
             result = {}
-            result["transcript"] = tg[0][1].mark
-            
-            result["audio"] = {"path": archive_path, "bytes": data, "sampling_rate":sr}
-            yield id_, result
-            id_+= 1
+            i = 0
+            intervalLength = 0
+            intervalStart = 0
+            filepath = os.path.join(self.config.path_to_data, 'tmp_clip.wav')
+            while i < len(tg[0]):
+                intervalLength += tg[0][i].maxTime-tg[0][i].minTime
+                if intervalLength > INTERVAL_MAX_LENGTH:
+                    result["transcript"] = tg[0][i].mark
+                    result["audio"] = {"path": archive_path, "bytes": data[int(tg[0][i].minTime*sr):int(tg[0][i].maxTime*sr)], "sampling_rate":sr}
+                    yield id_, result
+                    id_+= 1
+                    i+=1
+                    intervalLength = 0
+                else:
+                    if (intervalLength + tg[0][i+1].maxTime-tg[0][i+1].minTime) < INTERVAL_MAX_LENGTH:
+                        i+=1
+                        continue
+                    spliced_audio = data[int(intervalStart*sr):int(tg[0][i].maxTime*sr)]
+                    sf.write(filepath, spliced_audio, sr)
+                    result["transcript"] = "start:"+str(intervalStart)+", end:"+str(tg[0][i].maxTime)
+                    result["audio"] = {"path": filepath, "bytes": spliced_audio, "sampling_rate":sr}
+                    yield id_, result
+                    id_+= 1
+                    i+=1
+                    intervalLength=0
+                    intervalStart=tg[0][i].maxTime
+                    
 
             # audio_files = dl_manager.iter_archive(archive_path)
             # for path, f in audio_files:
