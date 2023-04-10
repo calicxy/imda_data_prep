@@ -6,3 +6,4 @@ pip install soundfile
 pip install librosa
 pip install openpyxl
 pip install sklearn
+textgrid from https://github.com/kylebgorman/textgrid/tree/master/textgrid
