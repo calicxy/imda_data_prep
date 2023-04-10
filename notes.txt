@@ -1,0 +1,8 @@
+D:\IMDA - National Speech Corpus\PART1\DATA\CHANNEL0\WAVE\SPEAKER0001.zip
+D:\IMDA - National Speech Corpus\PART1\DATA\CHANNEL0\SCRIPT\000010
+
+pip install datasets
+pip install soundfile
+pip install librosa
+pip install openpyxl
+pip install sklearn
