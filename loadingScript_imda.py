@@ -5,7 +5,8 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 
 _DESCRIPTION = """\
-This new dataset is designed to solve this great NLP task and is crafted with a lot of care.
+The National Speech Corpus (NSC) is the first large-scale Singapore English corpus 
+spearheaded by the Info-communications and Media Development Authority (IMDA) of Singapore.
 """
 
 _CITATION = """\
@@ -18,9 +19,9 @@ _GENDER_CONFIGS = sorted(["F", "M"])
 
 _RACE_CONFIGS = sorted(["CHINESE", "MALAY", "INDIAN", "OTHERS"])
 
-_HOMEPAGE = "https://huggingface.co/indonesian-nlp/librivox-indonesia"
+_HOMEPAGE = "https://www.imda.gov.sg/how-we-can-help/national-speech-corpus"
 
-_LICENSE = "https://creativecommons.org/publicdomain/zero/1.0/"
+_LICENSE = ""
 
 _PATH_TO_DATA = r'C:\Users\calic\Downloads\huggingface-dataset\imda-dataset\IMDA - National Speech Corpus\PART1'
 # _PATH_TO_DATA = './PART1/DATA'

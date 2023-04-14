@@ -1,10 +1,10 @@
 import os
-import glob
 import datasets
-import pandas as pd
+# import pandas as pd
 from sklearn.model_selection import train_test_split
 from textgrid import textgrid
 import soundfile as sf
+from clean_transcript import cleanup_string
 
 _DESCRIPTION = """\
 The National Speech Corpus (NSC) is the first large-scale Singapore English corpus 
@@ -19,7 +19,7 @@ _CHANNEL_CONFIGS = sorted([
 
 _HOMEPAGE = "https://www.imda.gov.sg/how-we-can-help/national-speech-corpus"
 
-_LICENSE = "https://creativecommons.org/publicdomain/zero/1.0/"
+_LICENSE = ""
 
 _PATH_TO_DATA = r'C:\Users\calic\Downloads\huggingface-dataset\imda-dataset\IMDA - National Speech Corpus\PART3'
 # _PATH_TO_DATA = './PART1/DATA'
@@ -84,6 +84,7 @@ class NewDataset(datasets.GeneratorBasedBuilder):
                 "transcript": datasets.Value("string"),
                 "mic": datasets.Value("string"),
                 "audio_name": datasets.Value("string"),
+                "interval": datasets.Value("string")
             }
         )
         
@@ -113,6 +114,16 @@ class NewDataset(datasets.GeneratorBasedBuilder):
             else [self.config.channel]
         )
 
+        audio_list = []
+        for mic in mics:
+            for (root,dirs,files) in os.walk(os.path.join(self.config.path_to_data, mic), topdown=True):
+                if len(files) != 0:
+                    for file in files:
+                        # get audio path
+                        audio_path = os.path.join(root, file)
+                        audio_list.append(audio_path)
+
+
         # dl_manager is a datasets.download.DownloadManager that can be used to download and extract URLS
         # It can accept any type or nested list/dict and will give back the same structure with the url replaced with path to local files.
         # By default the archives will be extracted and a path to a cached folder where they are extracted is returned instead of the archive
@@ -120,16 +131,16 @@ class NewDataset(datasets.GeneratorBasedBuilder):
             datasets.SplitGenerator(
             name=datasets.Split.TRAIN,
             gen_kwargs={
-                "path_to_data": os.path.join(self.config.path_to_data, "Audio Same CloseMic"),
-                "audio_ids":["0001"],
+                # "path_to_data": os.path.join(self.config.path_to_data, "Audio Same CloseMic"),
+                "audio_list":audio_list,
                 "mics": mics,
               },
           ),
           datasets.SplitGenerator(
             name=datasets.Split.TEST,
             gen_kwargs={
-                "path_to_data": os.path.join(self.config.path_to_data, "Audio Same CloseMic"),
-                "audio_ids": ["0003"],
+                # "path_to_data": os.path.join(self.config.path_to_data, "Audio Same CloseMic"),
+                "audio_list": audio_list,
                 "mics": mics,
             },
         ),
@@ -138,64 +149,81 @@ class NewDataset(datasets.GeneratorBasedBuilder):
     # method parameters are unpacked from `gen_kwargs` as given in `_split_generators`
     def _generate_examples(
             self,
-            path_to_data,
-            audio_ids,
+            audio_list,
             mics,
         ):
         id_ = 0
-        # for mic in mics:
-        #     for speaker in speaker_ids:
-        #         # TRANSCRIPT: in the case of error, if no file found then dictionary will b empty
-        #         script_path = os.path.join(path_to_data, "DATA", mic, "SCRIPT", mic[-1]+speaker+'*.TXT')
-        #         script_list = glob.glob(script_path)
-        #         d = {}
-        #         for script in script_list:
-        #             line_num = 0
-        #             with open(script, encoding='utf-8-sig') as f:
-        #                 for line in f:
-        #                     if line_num == 0:
-        #                         key = line.split("\t")[0]
-        #                         line_num += 1
-        #                     elif line_num == 1:
-        #                         d[key] = line.strip()
-        #                         line_num -= 1
-       
-        # LOAD TRANSCRIPT
-        script_path = os.path.join(self.config.path_to_data, 'Scripts Same', '3000-1.TextGrid')
-        tg = textgrid.TextGrid.fromFile(script_path)
-        # LOAD AUDIO
-        archive_path = os.path.join(path_to_data, '3000-1.wav')
-        # check that archive path exists, else will not open the archive
-        if os.path.exists(archive_path):
-            # read into a numpy array using soundfile
-            data, sr = sf.read(archive_path)
-            result = {}
-            i = 0
-            intervalLength = 0
-            intervalStart = 0
-            filepath = os.path.join(self.config.path_to_data, 'tmp_clip.wav')
-            while i < len(tg[0]):
-                intervalLength += tg[0][i].maxTime-tg[0][i].minTime
-                if intervalLength > INTERVAL_MAX_LENGTH:
-                    result["transcript"] = tg[0][i].mark
-                    result["audio"] = {"path": archive_path, "bytes": data[int(tg[0][i].minTime*sr):int(tg[0][i].maxTime*sr)], "sampling_rate":sr}
-                    yield id_, result
-                    id_+= 1
-                    i+=1
-                    intervalLength = 0
-                else:
-                    if (intervalLength + tg[0][i+1].maxTime-tg[0][i+1].minTime) < INTERVAL_MAX_LENGTH:
+        for audio_path in audio_list:
+            file = os.path.split(audio_path)[-1]
+            folder = os.path.split(os.path.split(audio_path)[0])[-1]
+
+            # get script_path
+            if folder.split("_")[0] == "conf":
+                # mic == "Audio Separate IVR"
+                script_path = os.path.join(self.config.path_to_data, "Scripts Separate", folder+"_"+file[:-4]+".TextGrid")
+            elif folder.split()[1] == "Same":
+                # mic == "Audio Same CloseMic IVR"
+                script_path = os.path.join(self.config.path_to_data, "Scripts Same", file[:-4]+".TextGrid")
+            elif folder.split()[1] == "Separate":
+                # mic == "Audio Separate StandingMic":
+                script_path = os.path.join(self.config.path_to_data, "Scripts Separate", file[:-4]+".TextGrid")
+            
+
+            # LOAD TRANSCRIPT
+            # script_path = os.path.join(self.config.path_to_data, 'Scripts Same', '3000-1.TextGrid')
+            # check that the textgrid file can be read
+            try:
+                tg = textgrid.TextGrid.fromFile(script_path)
+            except:
+                continue
+            # LOAD AUDIO
+            # archive_path = os.path.join(path_to_data, '3000-1.wav')
+            # check that archive path exists, else will not open the archive
+            if os.path.exists(audio_path):
+                # read into a numpy array using soundfile
+                data, sr = sf.read(audio_path)
+                result = {}
+                i = 0
+                intervalLength = 0
+                intervalStart = 0
+                transcript_list = []
+                filepath = os.path.join(self.config.path_to_data, 'tmp_clip.wav')
+                while i < (len(tg[0])-1):
+                    transcript = cleanup_string(tg[0][i].mark)
+                    if intervalLength == 0 and len(transcript) == 0:
+                        intervalStart = tg[0][i].maxTime
                         i+=1
                         continue
-                    spliced_audio = data[int(intervalStart*sr):int(tg[0][i].maxTime*sr)]
-                    sf.write(filepath, spliced_audio, sr)
-                    result["transcript"] = "start:"+str(intervalStart)+", end:"+str(tg[0][i].maxTime)
-                    result["audio"] = {"path": filepath, "bytes": spliced_audio, "sampling_rate":sr}
-                    yield id_, result
-                    id_+= 1
+                    intervalLength += tg[0][i].maxTime-tg[0][i].minTime
+                    if intervalLength > INTERVAL_MAX_LENGTH:
+                        print(f"INTERVAL LONGER THAN {intervalLength}")
+                        result["transcript"] = transcript
+                        result["interval"] = "start:"+str(tg[0][i].minTime)+", end:"+str(tg[0][i].maxTime)
+                        result["audio"] = {"path": audio_path, "bytes": data[int(tg[0][i].minTime*sr):int(tg[0][i].maxTime*sr)], "sampling_rate":sr}
+                        yield id_, result
+                        id_+= 1
+                        intervalLength = 0
+                    else:
+                        if (intervalLength + tg[0][i+1].maxTime-tg[0][i+1].minTime) < INTERVAL_MAX_LENGTH:
+                            if len(transcript) != 0:
+                                transcript_list.append(transcript)
+                            i+=1
+                            continue
+                        if len(transcript) == 0:
+                            spliced_audio = data[int(intervalStart*sr):int(tg[0][i].minTime*sr)]
+                        else:
+                            transcript_list.append(transcript)
+                            spliced_audio = data[int(intervalStart*sr):int(tg[0][i].maxTime*sr)]
+                        sf.write(filepath, spliced_audio, sr)
+                        result["interval"] = "start:"+str(intervalStart)+", end:"+str(tg[0][i].maxTime)
+                        result["audio"] = {"path": filepath, "bytes": spliced_audio, "sampling_rate":sr}
+                        result["transcript"] = ' '.join(transcript_list)
+                        yield id_, result
+                        id_+= 1
+                        intervalLength=0
+                        intervalStart=tg[0][i].maxTime
+                        transcript_list = []
                     i+=1
-                    intervalLength=0
-                    intervalStart=tg[0][i].maxTime
                     
 
             # audio_files = dl_manager.iter_archive(archive_path)
